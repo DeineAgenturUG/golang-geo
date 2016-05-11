@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
+	"regexp"
+	"strconv"
 )
 
 // Represents a Physical Point in geographic notation [lat, lng].
@@ -20,9 +23,165 @@ const (
 	EARTH_RADIUS = 6371
 )
 
+type Format int
+
+const (
+	// Decimal degrees format, e.g. 45.699750,-69.733722
+	DecimalDegrees = iota
+	// Decimal minutes format, e.g. N 45 41.985, W 69 44.023
+	DecimalMinutes
+	// Decimal seconds format, e.g. N 45 41 59.100, W 69 41 1.399
+	DecimalSeconds
+)
+
+var formatRegex *regexp.Regexp
+
+func init() {
+	// formatRegex matches three different text formats for latitude/longitude vales
+	formatRegex =
+		regexp.MustCompile(
+			// Decimal degrees, e.g. 45.699958,-69.733729 or N 45.699958 W 69.733729
+			// or 45.699958 N 69.733729 W
+			`^\s*(?P<ns>[NS+-]?)\s*(?P<lat_deg>\d{1,2}(?:\.\d*)?)°?\s*(?P<ns2>[NS]?)` +
+				`(?:\s+|\s*,\s*)` +
+				`(?P<ew>[EW+-]?)\s*(?P<lon_deg>\d{1,3}(?:\.\d*)?)°?\s*(?P<ew2>[EW]?)\s*$|` +
+				// Decimal minutes, e.g. 45 41.997, -69 44.024 or N 45 41.997 W 69 44.024
+				`^\s*(?P<ns>[NS+-]?)\s*(?P<lat_deg>\d{1,2})°?\s+(?P<lat_min>\d{1,2}(?:\.\d*)?)'?\s*(?P<ns2>[NS]?)` +
+				`(?:\s+|\s*,\s*)` +
+				`(?P<ew>[EW+-]?)\s*(?P<lon_deg>\d{1,3})°?\s+(?P<lon_min>\d{1,2}(?:\.\d*)?)'?\s*(?P<ew2>[EW]?)\s*$|` +
+				// Decimal seconds, e.g. 45 41 59.85, -69 44 01.42 or N 45 41 59.85, W 69 44 01.42
+				`^\s*(?P<ns>[NS+-]?)\s*(?P<lat_deg>\d{1,2})°?\s+(?P<lat_min>\d{1,2})'?\s+(?P<lat_sec>\d{1,2}(?:\.\d*)?)"?\s*(?P<ns2>[NS]?)` +
+				`(?:\s+|\s*,\s*)` +
+				`(?P<ew>[EW+-]?)\s*(?P<lon_deg>\d{1,3})°?\s+(?P<lon_min>\d{1,2})'?\s+(?P<lon_sec>\d{1,2}(?:\.\d*)?)"?\s*(?P<ew2>[EW]?)\s*$`)
+}
+
 // Returns a new Point populated by the passed in latitude (lat) and longitude (lng) values.
 func NewPoint(lat float64, lng float64) *Point {
 	return &Point{lat: lat, lng: lng}
+}
+
+// Parses a longitude/latitude string in a variety of formats and
+// returns a new Point populated with the parsed values.
+func Parse(value string) (*Point, error) {
+	segments := formatRegex.FindStringSubmatch(value)
+	if len(segments) < 1 {
+		return nil, errors.New("Unable to parse value: " + value)
+	}
+	switch {
+	case segments[2] != "":
+		lat, err := calcValue(segments[1:4])
+		if err != nil {
+			return nil, err
+		}
+		lng, err := calcValue(segments[4:7])
+		if err != nil {
+			return nil, err
+		}
+		return NewPoint(lat, lng), err
+	case segments[8] != "":
+		lat, err := calcValue(segments[7:11])
+		if err != nil {
+			return nil, err
+		}
+		lng, err := calcValue(segments[11:15])
+		if err != nil {
+			return nil, err
+		}
+		return NewPoint(lat, lng), err
+	case segments[16] != "":
+		lat, err := calcValue(segments[15:20])
+		if err != nil {
+			return nil, err
+		}
+		lng, err := calcValue(segments[20:25])
+		if err != nil {
+			return nil, err
+		}
+		return NewPoint(lat, lng), err
+	default:
+		return nil, errors.New("Unable to parse value: " + value)
+	}
+	return nil, nil
+}
+func trim(segments []string) []string {
+	start := -1
+	end := len(segments)
+	for i, s := range segments {
+		if s != "" && start == -1 {
+			start = i
+		}
+		if s != "" && start > -1 {
+			end = i
+		}
+	}
+	return segments[start : end+1]
+}
+func calcValue(segments []string) (value float64, err error) {
+	sign := 1.0
+	last := len(segments) - 1
+	if segments[0] == "S" || segments[0] == "W" || segments[0] == "-" ||
+		segments[last] == "S" || segments[last] == "W" {
+		sign = -1.0
+	}
+	value = 0.0
+	divisor := 1.0
+	for _, s := range segments[1:last] {
+		sv, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return value, err
+		}
+		value = value + sv/divisor
+		divisor = divisor * 60.0
+	}
+	return value * sign, err
+}
+
+// Formats a Point into one of several common string formats
+func (p *Point) Format(format Format) (string, error) {
+	switch format {
+	case DecimalDegrees:
+		return fmt.Sprintf("%f,%f", p.lat, p.lng), nil
+	case DecimalMinutes:
+		ns := "N"
+		if p.lat < 0 {
+			ns = "S"
+		}
+		lati, latf := math.Modf(math.Abs(p.lat))
+		latd := int(lati)
+		latm := latf * 60.0
+		ew := "E"
+		if p.lng < 0 {
+			ew = "W"
+		}
+		lngi, lngr := math.Modf(math.Abs(p.lng))
+		lngd := int(lngi)
+		lngm := lngr * 60.0
+		return fmt.Sprintf("%s %d %.3f, %s %d %.3f", ns, latd, latm, ew, lngd, lngm), nil
+	case DecimalSeconds:
+		ns := "N"
+		if p.lat < 0 {
+			ns = "S"
+		}
+		lati, latf := math.Modf(math.Abs(p.lat))
+		latd := int(lati)
+		latmf := latf * 60.0
+		lati, latf = math.Modf(latmf)
+		latm := int(lati)
+		lats := latf * 60.0
+		ew := "E"
+		if p.lng < 0 {
+			ew = "W"
+		}
+		lngi, lngf := math.Modf(math.Abs(p.lng))
+		lngd := int(lngi)
+		lngmf := lngf * 60.0
+		lngi, lngf = math.Modf(lngmf)
+		lngm := int(lati)
+		lngs := lngf * 60.0
+		return fmt.Sprintf("%s %d %d %.3f, %s %d %d %.3f", ns, latd, latm, lats, ew, lngd, lngm, lngs), nil
+	default:
+		return "", errors.New("Invalid format: " + string(format))
+	}
 }
 
 // Returns Point p's latitude.
