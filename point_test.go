@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"testing"
 )
 
@@ -23,6 +24,61 @@ func TestNewPoint(t *testing.T) {
 
 	if p.lng != 120.5 {
 		t.Errorf("Expected to be able to specify 120.5 as the lng value of a new point, but got %f instead", p.lng)
+	}
+}
+
+// Tests that Parse can handle a variet of formats and return the correct Point
+func TestParse(t *testing.T) {
+	var parsetests = []struct {
+		in  string
+		out Point
+	}{
+		{"40.5, 120.5", *NewPoint(40.5, 120.5)},
+		{"-40.5, -120.5", *NewPoint(-40.5, -120.5)},
+		{"-0.5, -0", *NewPoint(-0.5, 0)},
+		{"40 30.0, 120 30", *NewPoint(40.5, 120.5)},
+		{"40° 30', 120 30", *NewPoint(40.5, 120.5)},
+		{"40 30.0 S, 120 30 W", *NewPoint(-40.5, -120.5)},
+		{"N 12 20 44.16, W 23 27 24.12", *NewPoint(12.345600, -23.456700)},
+		{`45° 41' 59.1" N 69° 44' 01.4" W`, *NewPoint(45.699750, -69.733722)},
+	}
+
+	for _, tt := range parsetests {
+		p, err := Parse(tt.in)
+		if err != nil {
+			t.Errorf("Expected err to be nil, but got %v instead.", err)
+		}
+		if p == nil {
+			t.Error("Expected to get a pointer to a new point, but got nil instead.")
+		}
+		if math.Abs(p.lat-tt.out.lat) > 0.000001 || math.Abs(p.lng-tt.out.lng) > 0.000001 {
+			t.Errorf("Expected that specifying %s as a new point would produce %v, but got %v instead", tt.in, tt.out, p)
+		}
+	}
+}
+
+// Tests that Format can return correct values for various points
+func TestFormat(t *testing.T) {
+	var formattests = []struct {
+		in    Point
+		inFmt Format
+		out   string
+	}{
+		{*NewPoint(45.699750, -69.733722), DecimalDegrees, "45.699750,-69.733722"},
+		{*NewPoint(45.699750, -69.733722), DecimalMinutes, "N 45 41.985, W 69 44.023"},
+		{*NewPoint(45.699750, -69.733722), DecimalSeconds, "N 45 41 59.100, W 69 41 1.399"},
+		{*NewPoint(-45.699750, 69.733722), DecimalDegrees, "-45.699750,69.733722"},
+		{*NewPoint(-45.699750, 69.733722), DecimalMinutes, "S 45 41.985, E 69 44.023"},
+		{*NewPoint(-45.699750, 69.733722), DecimalSeconds, "S 45 41 59.100, E 69 41 1.399"},
+	}
+	for _, tt := range formattests {
+		dd, err := tt.in.Format(tt.inFmt)
+		if err != nil {
+			t.Errorf("Expected err to be nil, but got %v instead.", err)
+		}
+		if dd != tt.out {
+			t.Errorf("Expected a call to format point %v with format %d to return '%s', but got '%s' instead", tt.in, tt.inFmt, tt.out, dd)
+		}
 	}
 }
 
