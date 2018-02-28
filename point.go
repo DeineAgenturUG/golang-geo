@@ -20,7 +20,7 @@ type Point struct {
 
 const (
 	// According to Wikipedia, the Earth's radius is about 6,371km
-	EARTH_RADIUS = 3440.065334773 // seemiles
+	EARTHRADIUS = 3440.065334773 // sea miles
 )
 
 type Format int
@@ -101,8 +101,9 @@ func Parse(value string) (*Point, error) {
 	default:
 		return nil, errors.New("Unable to parse value: " + value)
 	}
-	return nil, nil
 }
+
+/*
 func trim(segments []string) []string {
 	start := -1
 	end := len(segments)
@@ -116,6 +117,8 @@ func trim(segments []string) []string {
 	}
 	return segments[start : end+1]
 }
+*/
+
 func calcValue(segments []string) (value float64, err error) {
 	sign := 1.0
 	last := len(segments) - 1
@@ -206,23 +209,23 @@ func (p *Point) Lon() float64 {
 // Original Implementation from: http://www.movable-type.co.uk/scripts/latlong.html
 func (p *Point) PointAtDistanceAndBearing(dist float64, bearing float64) *Point {
 
-	dr := dist / EARTH_RADIUS
+	dr := dist / EARTHRADIUS
 
-	bearing = (bearing * (math.Pi / 180.0))
+	bearing = bearing * math.Pi / 180.0
 
-	lat1 := (p.lat * (math.Pi / 180.0))
-	lng1 := (p.lng * (math.Pi / 180.0))
+	lat1 := p.lat * math.Pi / 180.0
+	lng1 := p.lng * math.Pi / 180.0
 
-	lat2_part1 := math.Sin(lat1) * math.Cos(dr)
-	lat2_part2 := math.Cos(lat1) * math.Sin(dr) * math.Cos(bearing)
+	lat2Part1 := math.Sin(lat1) * math.Cos(dr)
+	lat2Part2 := math.Cos(lat1) * math.Sin(dr) * math.Cos(bearing)
 
-	lat2 := math.Asin(lat2_part1 + lat2_part2)
+	lat2 := math.Asin(lat2Part1 + lat2Part2)
 
-	lng2_part1 := math.Sin(bearing) * math.Sin(dr) * math.Cos(lat1)
-	lng2_part2 := math.Cos(dr) - (math.Sin(lat1) * math.Sin(lat2))
+	lng2Part1 := math.Sin(bearing) * math.Sin(dr) * math.Cos(lat1)
+	lng2Part2 := math.Cos(dr) - (math.Sin(lat1) * math.Sin(lat2))
 
-	lng2 := lng1 + math.Atan2(lng2_part1, lng2_part2)
-	lng2 = math.Mod((lng2 + 3*math.Pi), (2 * math.Pi)) - math.Pi
+	lng2 := lng1 + math.Atan2(lng2Part1, lng2Part2)
+	lng2 = math.Mod(lng2+3*math.Pi, 2*math.Pi) - math.Pi
 
 	lat2 = lat2 * (180.0 / math.Pi)
 	lng2 = lng2 * (180.0 / math.Pi)
@@ -246,7 +249,7 @@ func (p *Point) GreatCircleDistance(p2 *Point) float64 {
 
 	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
 
-	return EARTH_RADIUS * c
+	return EARTHRADIUS * c
 }
 
 // returns cross track error in sea miles
@@ -264,7 +267,7 @@ func (p *Point) CrossTrackError(start *Point, end *Point) float64 {
 	// t13 = bearing start to current (in radians)
 	t13 := start.BearingTo(p) * deg
 
-	xte := math.Asin(math.Sin(d13/EARTH_RADIUS)*math.Sin(t13-t12)) * EARTH_RADIUS
+	xte := math.Asin(math.Sin(d13/EARTHRADIUS)*math.Sin(t13-t12)) * EARTHRADIUS
 
 	return xte
 }
@@ -278,7 +281,7 @@ func (p *Point) AlongTrackDistance(start *Point, end *Point) float64 {
 	// dxt - cross-track error
 	dxt := p.CrossTrackError(start, end)
 
-	dat := math.Acos(math.Cos(d13/EARTH_RADIUS)/math.Cos(dxt/EARTH_RADIUS)) * EARTH_RADIUS
+	dat := math.Acos(math.Cos(d13/EARTHRADIUS)/math.Cos(dxt/EARTHRADIUS)) * EARTHRADIUS
 
 	return dat
 }
