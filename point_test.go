@@ -148,6 +148,19 @@ func TestBearingTo(t *testing.T) {
 	}
 }
 
+func TestBearingToBetween0to360(t *testing.T) {
+	p1 := &Point{lat: -25.5316666666667, lng: -49.1761111111111}
+	p2 := &Point{lat: 40.63980103, lng: -73.77890015}
+	bearing := p1.BearingTo(p2)
+
+	// Expected bearing between 0 and 360 degrees
+	withinBearingBounds := 0. < bearing && bearing <= 360.
+
+	if !withinBearingBounds {
+		t.Error("Unnacceptable result.", fmt.Sprintf("%f", bearing))
+	}
+}
+
 func TestMidpointTo(t *testing.T) {
 	p1 := &Point{lat: 52.205, lng: 0.119}
 	p2 := &Point{lat: 48.857, lng: 2.351}

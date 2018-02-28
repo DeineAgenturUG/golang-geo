@@ -257,6 +257,10 @@ func (p *Point) BearingTo(p2 *Point) float64 {
 		math.Sin(lat1)*math.Cos(lat2)*math.Cos(dLon)
 	brng := math.Atan2(y, x) * 180.0 / math.Pi
 
+	if brng < 0. {
+		brng = 360. + brng
+	}
+
 	return brng
 }
 
