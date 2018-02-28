@@ -1,5 +1,11 @@
 # golang-geo changelog
 
+## [0.8.0](https://github.com/DeineAgenturUG/golang-geo/tree/v0.8.0) February 28, 2018
+
+  - Adds CrossTrackError and AlongTrackDistance
+  - Remove not needed crap
+  - default sea miles as distance
+
 ## [0.7.0](https://github.com/kellydunn/golang-geo/tree/v0.7.0) December 8, 2015
 
   - Adds the ability for points to be marshalled an unmarshalled via a binary protocol (gob).

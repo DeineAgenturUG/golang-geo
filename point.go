@@ -20,7 +20,7 @@ type Point struct {
 
 const (
 	// According to Wikipedia, the Earth's radius is about 6,371km
-	EARTH_RADIUS = 6371
+	EARTH_RADIUS = 3440.065334773 // seemiles
 )
 
 type Format int
@@ -45,11 +45,11 @@ func init() {
 			`^\s*(?P<ns>[NS+-]?)\s*(?P<lat_deg>\d{1,2}(?:\.\d*)?)°?\s*(?P<ns2>[NS]?)` +
 				`(?:\s+|\s*,\s*)` +
 				`(?P<ew>[EW+-]?)\s*(?P<lon_deg>\d{1,3}(?:\.\d*)?)°?\s*(?P<ew2>[EW]?)\s*$|` +
-				// Decimal minutes, e.g. 45 41.997, -69 44.024 or N 45 41.997 W 69 44.024
+			// Decimal minutes, e.g. 45 41.997, -69 44.024 or N 45 41.997 W 69 44.024
 				`^\s*(?P<ns>[NS+-]?)\s*(?P<lat_deg>\d{1,2})°?\s+(?P<lat_min>\d{1,2}(?:\.\d*)?)'?\s*(?P<ns2>[NS]?)` +
 				`(?:\s+|\s*,\s*)` +
 				`(?P<ew>[EW+-]?)\s*(?P<lon_deg>\d{1,3})°?\s+(?P<lon_min>\d{1,2}(?:\.\d*)?)'?\s*(?P<ew2>[EW]?)\s*$|` +
-				// Decimal seconds, e.g. 45 41 59.85, -69 44 01.42 or N 45 41 59.85, W 69 44 01.42
+			// Decimal seconds, e.g. 45 41 59.85, -69 44 01.42 or N 45 41 59.85, W 69 44 01.42
 				`^\s*(?P<ns>[NS+-]?)\s*(?P<lat_deg>\d{1,2})°?\s+(?P<lat_min>\d{1,2})'?\s+(?P<lat_sec>\d{1,2}(?:\.\d*)?)"?\s*(?P<ns2>[NS]?)` +
 				`(?:\s+|\s*,\s*)` +
 				`(?P<ew>[EW+-]?)\s*(?P<lon_deg>\d{1,3})°?\s+(?P<lon_min>\d{1,2})'?\s+(?P<lon_sec>\d{1,2}(?:\.\d*)?)"?\s*(?P<ew2>[EW]?)\s*$`)
@@ -194,8 +194,14 @@ func (p *Point) Lng() float64 {
 	return p.lng
 }
 
+// Returns Point p's longitude.
+// alias for Point.Lng()
+func (p *Point) Lon() float64 {
+	return p.lng
+}
+
 // Returns a Point populated with the lat and lng coordinates
-// by transposing the origin point the passed in distance (in kilometers)
+// by transposing the origin point the passed in distance (in sea miles)
 // by the passed in compass bearing (in degrees).
 // Original Implementation from: http://www.movable-type.co.uk/scripts/latlong.html
 func (p *Point) PointAtDistanceAndBearing(dist float64, bearing float64) *Point {
@@ -216,7 +222,7 @@ func (p *Point) PointAtDistanceAndBearing(dist float64, bearing float64) *Point 
 	lng2_part2 := math.Cos(dr) - (math.Sin(lat1) * math.Sin(lat2))
 
 	lng2 := lng1 + math.Atan2(lng2_part1, lng2_part2)
-	lng2 = math.Mod((lng2+3*math.Pi), (2*math.Pi)) - math.Pi
+	lng2 = math.Mod((lng2 + 3*math.Pi), (2 * math.Pi)) - math.Pi
 
 	lat2 = lat2 * (180.0 / math.Pi)
 	lng2 = lng2 * (180.0 / math.Pi)
@@ -224,7 +230,7 @@ func (p *Point) PointAtDistanceAndBearing(dist float64, bearing float64) *Point 
 	return &Point{lat: lat2, lng: lng2}
 }
 
-// Calculates the Haversine distance between two points in kilometers.
+// Calculates the Haversine distance between two points in sea miles.
 // Original Implementation from: http://www.movable-type.co.uk/scripts/latlong.html
 func (p *Point) GreatCircleDistance(p2 *Point) float64 {
 	dLat := (p2.lat - p.lat) * (math.Pi / 180.0)
@@ -241,6 +247,40 @@ func (p *Point) GreatCircleDistance(p2 *Point) float64 {
 	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
 
 	return EARTH_RADIUS * c
+}
+
+// returns cross track error in sea miles
+func (p *Point) CrossTrackError(start *Point, end *Point) float64 {
+
+	// constants
+	deg := math.Pi / float64(180) // degrees to radians
+
+	// d13 = distance start to current
+	d13 := start.GreatCircleDistance(p)
+
+	// t12 = bearing start to end (in radians)
+	t12 := start.BearingTo(end) * deg
+
+	// t13 = bearing start to current (in radians)
+	t13 := start.BearingTo(p) * deg
+
+	xte := math.Asin(math.Sin(d13/EARTH_RADIUS)*math.Sin(t13-t12)) * EARTH_RADIUS
+
+	return xte
+}
+
+// returns distance along the track in sea miles
+func (p *Point) AlongTrackDistance(start *Point, end *Point) float64 {
+
+	// d13 - distance start to current
+	d13 := start.GreatCircleDistance(p)
+
+	// dxt - cross-track error
+	dxt := p.CrossTrackError(start, end)
+
+	dat := math.Acos(math.Cos(d13/EARTH_RADIUS)/math.Cos(dxt/EARTH_RADIUS)) * EARTH_RADIUS
+
+	return dat
 }
 
 // Calculates the initial bearing (sometimes referred to as forward azimuth)
